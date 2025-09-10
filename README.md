@@ -52,15 +52,15 @@ A comprehensive backend application for a digital product marketplace built with
    PORT=3000
    NODE_ENV=development
    MONGODB_URI=database url
-JWT_SECRET=your-super-secret-jwt-key
-JWT_EXPIRES_IN=7d
-ADMIN_PHONE=9999999999
-ADMIN_PASSWORD=admin123
-ADMIN_NAME=System Administrator
-RAZORPAY_WEBHOOK_SECRET=AToRItEiNeQuIlCUPLAR
-PAYMENT_TIMEOUT=120000
-UPI_ADDRESS=upi://pay?
-INVITE_AMOUNT=100
+   JWT_SECRET=your-super-secret-jwt-key
+   JWT_EXPIRES_IN=7d
+   ADMIN_PHONE=9999999999
+   ADMIN_PASSWORD=admin123
+   ADMIN_NAME=System Administrator
+   RAZORPAY_WEBHOOK_SECRET=AToRItEiNeQuIlCUPLAR
+   PAYMENT_TIMEOUT=120000
+   UPI_ADDRESS=upi://pay?
+   INVITE_AMOUNT=100
    ```
 
 4. **Start MongoDB**
@@ -435,4 +435,5 @@ For support and questions:
   - Admin dashboard
 
   - Daily earnings automation
+
 
