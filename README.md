@@ -48,9 +48,10 @@ A comprehensive backend application for a digital product marketplace built with
    ```
    
    Update the `.env` file with your configuration:
-   ```envPORT=3000
-NODE_ENV=development
-MONGODB_URI=mongodb+srv://armaanmalik998494:L8EbxxPshFaFCmEw@cluster0.2mscw6t.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+   ```env
+   PORT=3000
+   NODE_ENV=development
+   MONGODB_URI=database url
 JWT_SECRET=your-super-secret-jwt-key
 JWT_EXPIRES_IN=7d
 ADMIN_PHONE=9999999999
@@ -58,7 +59,7 @@ ADMIN_PASSWORD=admin123
 ADMIN_NAME=System Administrator
 RAZORPAY_WEBHOOK_SECRET=AToRItEiNeQuIlCUPLAR
 PAYMENT_TIMEOUT=120000
-UPI_ADDRESS=upi://pay?ver=01&mode=19&pa=noisewaves744274.rzp@icici&pn=NoiseWaves&tr=RZPRFWdaKM5WLQNfPqrv2&cu=INR&mc=5732&qrMedium=04&tn=PaymenttoNoiseWaves&am
+UPI_ADDRESS=upi://pay?
 INVITE_AMOUNT=100
    ```
 
@@ -434,3 +435,4 @@ For support and questions:
   - Admin dashboard
 
   - Daily earnings automation
+
