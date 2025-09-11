@@ -409,17 +409,17 @@ router.put('/transactions/:id/process', [
           { session }
         );
       } else if (transaction.type === 'withdrawal') {
-        // Deduct amount from user's balance
-        const user = await User.findById(transaction.userId._id);
-        if (user.balance < transaction.amount) { // Check balance
-          throw new Error('Insufficient balance for withdrawal');
-        }
+        // Deduct amount from user's balance (Note : Already Amount is Deduct with withdrawal req)
+        // const user = await User.findById(transaction.userId._id);
+        // if (user.balance < transaction.amount) { // Check balance
+        //   throw new Error('Insufficient balance for withdrawal');
+        // }
 
-        await User.findByIdAndUpdate(
-          transaction.userId._id,
-          { $inc: { balance: -transaction.amount } }, // Use 'balance'
-          { session }
-        );
+        // await User.findByIdAndUpdate(
+        //   transaction.userId._id,
+        //   { $inc: { balance: -transaction.amount } }, // Use 'balance'
+        //   { session }
+        // );
       }
 
       transaction.status = 'success'; // Update status to 'success'
