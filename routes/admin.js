@@ -26,19 +26,28 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     totalRevenue,
     totalEarningsDistributed
   ] = await Promise.all([
-    User.countDocuments({ isAdmin: false }),
-    Product.countDocuments({ isActive: true }),
+    User.countDocuments({ role: 'user' }), // Use role field
+    Product.countDocuments(), // Assuming all products are "active" unless otherwise filtered
     Order.countDocuments(),
     Transaction.countDocuments({ status: 'pending' }),
     Order.aggregate([
-      { $group: { _id: null, total: { $sum: '$orderAmount' } } }
+      {
+        $lookup: {
+          from: 'products', // The collection name for productSchema
+          localField: 'productId',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      { $group: { _id: null, total: { $sum: '$product.price' } } } // Correctly sum revenue
     ]).then(result => result[0]?.total || 0),
     Transaction.aggregate([
-      { 
-        $match: { 
-          type: { $in: ['earning', 'referral_bonus'] }, 
-          status: 'completed' 
-        } 
+      {
+        $match: {
+          type: { $in: ['withdrawal'] }, // Align with transactionSchema enum
+          status: 'success' // Align with transactionSchema enum
+        }
       },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]).then(result => result[0]?.total || 0)
@@ -64,10 +73,19 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
   const monthlyStats = await Order.aggregate([
     { $match: { createdAt: { $gte: currentMonth } } },
     {
+      $lookup: {
+        from: 'products',
+        localField: 'productId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    {
       $group: {
         _id: null,
         monthlyOrders: { $sum: 1 },
-        monthlyRevenue: { $sum: '$orderAmount' }
+        monthlyRevenue: { $sum: '$product.price' }
       }
     }
   ]);
@@ -96,20 +114,20 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
 // @route   GET /api/admin/users
 // @access  Private/Admin
 router.get('/users', asyncHandler(async (req, res) => {
-  const { page, limit, search, isAdmin } = req.query;
+  const { page, limit, search, role } = req.query; // Use 'role' instead of 'isAdmin'
   const { page: pageNum, limit: limitNum, skip } = getPagination(page, limit);
-  
+
   const filter = {};
-  
+
   if (search) {
     filter.$or = [
       { fullName: { $regex: search, $options: 'i' } },
       { phoneNumber: { $regex: search, $options: 'i' } }
     ];
   }
-  
-  if (isAdmin !== undefined) {
-    filter.isAdmin = isAdmin === 'true';
+
+  if (role) { // Correctly filter by role
+    filter.role = role;
   }
 
   const users = await User.find(filter)
@@ -139,7 +157,7 @@ router.get('/users', asyncHandler(async (req, res) => {
 // @access  Private/Admin
 router.get('/users/:id', asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select('-password');
-  
+
   if (!user) {
     return res.status(404).json({
       success: false,
@@ -185,12 +203,12 @@ router.post('/users', [
     .matches(/^[0-9]{10}$/)
     .withMessage('Please enter a valid 10-digit phone number'),
   body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
-  body('isAdmin')
+    .isLength({ min: 5 }) // Match the schema minlength
+    .withMessage('Password must be at least 5 characters long'),
+  body('role')
     .optional()
-    .isBoolean()
-    .withMessage('isAdmin must be a boolean value')
+    .isIn(['user', 'admin'])
+    .withMessage('Role must be either user or admin')
 ], asyncHandler(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -201,7 +219,7 @@ router.post('/users', [
     });
   }
 
-  const { fullName, phoneNumber, password, isAdmin = false } = req.body;
+  const { fullName, phoneNumber, password, role = "user" } = req.body; // Correctly use role field
 
   // Check if user already exists
   const existingUser = await User.findOne({ phoneNumber });
@@ -220,7 +238,7 @@ router.post('/users', [
     phoneNumber,
     password,
     referralCode,
-    isAdmin
+    role // Use the role field
   });
 
   await user.save();
@@ -239,7 +257,7 @@ router.post('/users', [
 // @access  Private/Admin
 router.put('/users/:id', asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
-  
+
   if (!user) {
     return res.status(404).json({
       success: false,
@@ -247,16 +265,12 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
     });
   }
 
-  const allowedFields = ['fullName', 'isAdmin', 'wallet.balance'];
+  const allowedFields = ['fullName', 'role', 'balance']; // Use 'role' and 'balance'
   const updateFields = {};
 
   allowedFields.forEach(field => {
     if (req.body[field] !== undefined) {
-      if (field === 'wallet.balance') {
-        updateFields['wallet.balance'] = req.body[field];
-      } else {
-        updateFields[field] = req.body[field];
-      }
+      updateFields[field] = req.body[field];
     }
   });
 
@@ -280,7 +294,7 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
 // @access  Private/Admin
 router.delete('/users/:id', asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
-  
+
   if (!user) {
     return res.status(404).json({
       success: false,
@@ -288,7 +302,7 @@ router.delete('/users/:id', asyncHandler(async (req, res) => {
     });
   }
 
-  if (user.isAdmin) {
+  if (user.role === 'admin') { // Correctly check for admin role
     return res.status(400).json({
       success: false,
       message: 'Cannot delete admin user'
@@ -309,20 +323,19 @@ router.delete('/users/:id', asyncHandler(async (req, res) => {
 router.get('/transactions', asyncHandler(async (req, res) => {
   const { page, limit, type, status } = req.query;
   const { page: pageNum, limit: limitNum, skip } = getPagination(page, limit);
-  
+
   const filter = {};
-  
+
   if (type) {
     filter.type = type;
   }
-  
+
   if (status) {
     filter.status = status;
   }
 
   const transactions = await Transaction.find(filter)
     .populate('userId', 'fullName phoneNumber')
-    .populate('processedBy', 'fullName')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limitNum);
@@ -367,7 +380,7 @@ router.put('/transactions/:id/process', [
 
   const { action, adminNotes } = req.body;
   const transaction = await Transaction.findById(req.params.id)
-    .populate('userId', 'fullName phoneNumber wallet');
+    .populate('userId', 'fullName phoneNumber balance'); // Populate user balance
 
   if (!transaction) {
     return res.status(404).json({
@@ -389,29 +402,31 @@ router.put('/transactions/:id/process', [
   try {
     if (action === 'approve') {
       if (transaction.type === 'deposit') {
-        // Add amount to user's wallet
+        // Add amount to user's balance
         await User.findByIdAndUpdate(
           transaction.userId._id,
-          { $inc: { 'wallet.balance': transaction.amount } },
+          { $inc: { balance: transaction.amount } }, // Use 'balance'
           { session }
         );
       } else if (transaction.type === 'withdrawal') {
-        // Deduct amount from user's wallet
+        // Deduct amount from user's balance
         const user = await User.findById(transaction.userId._id);
-        if (user.wallet.balance < transaction.amount) {
+        if (user.balance < transaction.amount) { // Check balance
           throw new Error('Insufficient balance for withdrawal');
         }
-        
+
         await User.findByIdAndUpdate(
           transaction.userId._id,
-          { $inc: { 'wallet.balance': -transaction.amount } },
+          { $inc: { balance: -transaction.amount } }, // Use 'balance'
           { session }
         );
       }
-      
-      transaction.approve(req.user._id, adminNotes);
+
+      transaction.status = 'success'; // Update status to 'success'
+      transaction.adminNotes = adminNotes;
     } else {
-      transaction.reject(req.user._id, adminNotes);
+      transaction.status = 'rejected'; // Update status to 'rejected'
+      transaction.adminNotes = adminNotes;
     }
 
     await transaction.save({ session });
@@ -439,7 +454,7 @@ router.put('/transactions/:id/process', [
 router.get('/orders', asyncHandler(async (req, res) => {
   const { page, limit, status } = req.query;
   const { page: pageNum, limit: limitNum, skip } = getPagination(page, limit);
-  
+
   const filter = {};
   if (status) {
     filter.status = status;
@@ -474,13 +489,14 @@ router.get('/orders', asyncHandler(async (req, res) => {
 router.get('/analytics', asyncHandler(async (req, res) => {
   const { period = '30' } = req.query;
   const days = parseInt(period);
-  
+
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
+  startDate.setHours(0, 0, 0, 0); // Ensure consistent start time
 
   // User growth
   const userGrowth = await User.aggregate([
-    { $match: { createdAt: { $gte: startDate }, isAdmin: false } },
+    { $match: { createdAt: { $gte: startDate }, role: 'user' } }, // Correctly check for role
     {
       $group: {
         _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
@@ -494,9 +510,18 @@ router.get('/analytics', asyncHandler(async (req, res) => {
   const revenueAnalytics = await Order.aggregate([
     { $match: { createdAt: { $gte: startDate } } },
     {
+      $lookup: {
+        from: 'products',
+        localField: 'productId',
+        foreignField: '_id',
+        as: 'product'
+      }
+    },
+    { $unwind: '$product' },
+    {
       $group: {
         _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-        dailyRevenue: { $sum: '$orderAmount' },
+        dailyRevenue: { $sum: '$product.price' },
         orderCount: { $sum: 1 }
       }
     },
@@ -510,7 +535,6 @@ router.get('/analytics', asyncHandler(async (req, res) => {
       $group: {
         _id: '$productId',
         totalOrders: { $sum: 1 },
-        totalRevenue: { $sum: '$orderAmount' }
       }
     },
     {
@@ -522,7 +546,7 @@ router.get('/analytics', asyncHandler(async (req, res) => {
       }
     },
     { $unwind: '$product' },
-    { $sort: { totalRevenue: -1 } },
+    { $sort: { totalOrders: -1 } }, // Sort by order count
     { $limit: 10 }
   ]);
 
