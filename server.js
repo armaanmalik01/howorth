@@ -1,6 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+// http logger 
+
+import morgan from "morgan";
+
+
 import connectDB from './config/database.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
@@ -39,6 +45,9 @@ app.use(cors());
 app.use(express.static("public"))
 app.set('view engine', 'ejs')
 
+app.use(morgan('combined'))
+
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
@@ -73,5 +82,6 @@ app.listen(PORT,() => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
 });
+
 
 export default app;
